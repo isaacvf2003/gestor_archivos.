@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestor de Archivos GRIF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app" class="main-layout">
+
+  <!-- Botón hamburguesa SOLO si hay usuario (responsive) -->
+  <button class="menu-btn" v-if="user" @click="menuAbierto = !menuAbierto">
+    <div class="sidebar-overlay" v-if="menuAbierto"></div>
+    <span></span><span></span><span></span>
+  </button>
+
+  <!-- Sidebar lateral, solo visible si user -->
+  <aside class="sidebar" v-if="user" :class="{abierto: menuAbierto}">
+    <div class="logo">
+      <img src="Imagen-de-WhatsApp-2025-07-25-a-las-08.20.43_f94f1f41.png" alt="Logo GRIF" />
+      <span>GRIF S.A.</span>
+    </div>
+    <nav>
+      <ul>
+        <li v-if="user && user.admin" :class="{active: page==='dashboard'}" @click="cambiarPagina('dashboard'); menuAbierto=false">🏠 Inicio</li>
+        <li v-if="user && user.admin" :class="{active: page==='usuarios'}" @click="cambiarPagina('usuarios'); menuAbierto=false">👥 Usuarios</li>
+        <li :class="{active: page==='carpetas'}" @click="cambiarPagina('carpetas'); menuAbierto=false">📁 Carpetas</li>
+        <li :class="{active: page==='acerca'}" @click="cambiarPagina('acerca'); menuAbierto=false">ℹ️ Acerca</li>
+      </ul>
+    </nav>
+  </aside>
+
+  <!-- Contenido principal -->
+  <section class="main-content">
+    <!-- Barra superior -->
+    <header class="header-bar" v-if="user">
+      <span>Bienvenido, {{user.nombre}} <span v-if="user.admin">(Admin)</span></span>
+      <button @click="logout" class="btn-out">Salir</button>
+    </header>
+
+    <!-- LOGIN SOLO si no hay usuario -->
+    <div v-if="!user" class="login-card">
+      <div class="logo-login">
+        <img src="Imagen-de-WhatsApp-2025-07-25-a-las-08.20.43_f94f1f41.png" alt="Logo GRIF" />
+      </div>
+      <h2>Iniciar Sesión</h2>
+      <input v-model="login.usuario" placeholder="Usuario" autocomplete="username">
+      <input v-model="login.clave" type="password" placeholder="Clave" autocomplete="current-password">
+      <button @click="loginUser">Entrar</button>
+      <div v-if="loginError" class="error">Usuario o clave incorrectos</div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div v-else-if="page==='dashboard'">
+      <h2>Dashboard</h2>
+      <div class="dashboard-cards">
+        <div class="card stat">
+          <div class="stat-title">Usuarios</div>
+          <div class="stat-value">{{usuarios.length}}</div>
+        </div>
+        <div class="card stat">
+          <div class="stat-title">Carpetas</div>
+          <div class="stat-value">{{carpetas.length}}</div>
+        </div>
+        <div class="card stat">
+          <div class="stat-title">Archivos</div>
+          <div class="stat-value">{{archivosTotal}}</div>
+        </div>
+      </div>
+      <h3>Última actividad</h3>
+      <table class="table-activity">
+        <thead>
+          <tr><th>Usuario</th><th>Archivo</th><th>Fecha</th><th>Descripción</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="a in ultimosArchivos" :key="a.id">
+            <td>{{a.nombre_usuario}}</td>
+            <td>{{a.nombre_archivo}}</td>
+            <td>{{a.fecha_subida | fecha}}</td>
+            <td>{{a.descripcion}}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- GESTIÓN DE USUARIOS (solo admin) -->
+    <div v-else-if="page==='usuarios' && user && user.admin">
+      <h2>Gestión de Usuarios</h2>
+      <button @click="showUserForm=true" class="btn-main">+ Nuevo Usuario</button>
+      <table class="table-users">
+        <thead><tr><th>Nombre</th><th>Usuario</th><th>Admin</th><th>Acciones</th></tr></thead>
+        <tbody>
+          <tr v-for="u in usuarios" :key="u.id">
+            <td>{{u.nombre}}</td>
+            <td>{{u.usuario}}</td>
+            <td>{{u.es_admin ? '✔' : ''}}</td>
+            <td>
+              <button @click="verArchivosDe(u)" class="btn-sm">Archivos</button>
+              <button @click="eliminarUsuario(u)" class="btn-sm btn-del">Eliminar</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <!-- Modal agregar usuario -->
+      <div v-if="showUserForm" class="modal">
+        <div class="modal-content">
+          <h3>Nuevo Usuario</h3>
+          <input v-model="nuevoUsuario.nombre" placeholder="Nombre">
+          <input v-model="nuevoUsuario.usuario" placeholder="Usuario">
+          <input v-model="nuevoUsuario.clave" type="password" placeholder="Clave">
+          <label><input type="checkbox" v-model="nuevoUsuario.es_admin"> Admin</label>
+          <div class="modal-actions">
+            <button @click="crearUsuario" class="btn-main">Crear</button>
+            <button @click="showUserForm=false" class="btn-sec">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GESTIÓN DE CARPETAS Y ARCHIVOS -->
+    <div v-else-if="page==='carpetas' && user">
+      <h2 style="display: flex;align-items:center;">
+        Carpetas
+        <button class="btn-sm" @click="actualizarVista" style="margin-left:16px;">🔄 Actualizar</button>
+      </h2>
+      <button v-if="user.admin" @click="showFolderForm=true" class="btn-main">+ Nueva Carpeta</button>
+      <!-- Breadcrumbs navegación -->
+      <div v-if="breadcrumb.length || carpetaPadre" class="breadcrumb-bar">
+        <span class="breadcrumb-link" @click="volverRaiz">Carpetas raíz</span>
+        <span v-for="(c, idx) in breadcrumb" :key="c.id">
+          › <span class="breadcrumb-link" @click="volverCarpetaIndex(idx)">{{c.nombre}}</span>
+        </span>
+      </div>
+
+      <!-- Grid de carpetas -->
+      <div class="carpetas-grid">
+        <div class="carpeta-card" v-for="c in carpetas" :key="c.id">
+          <div class="icono-carpeta">
+            <svg width="42" height="38" viewBox="0 0 42 38" fill="none">
+              <rect x="1" y="8" width="40" height="28" rx="5" fill="#2196f3" stroke="#1565c0" stroke-width="2"/>
+              <rect x="1" y="8" width="14" height="8" rx="3" fill="#42a5f5"/>
+              <rect x="15" y="1" width="10" height="14" rx="3" fill="#90caf9"/>
+            </svg>
+          </div>
+          <div class="carpeta-nombre">{{c.nombre}}</div>
+          <div class="carpeta-acciones">
+           <button @click="seleccionarCarpeta(c)" class="btn-sm btn-carpeta-ver">Ver</button>
+            <button v-if="user.admin" @click="eliminarCarpeta(c)" class="btn-sm btn-del">Eliminar</button>
+            <button v-if="user.admin" @click="abrirRenombrar(c)" class="btn-sm">Renombrar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal agregar carpeta -->
+      <div v-if="showFolderForm" class="modal">
+        <div class="modal-content">
+          <h3>Nueva Carpeta</h3>
+          <input v-model="nuevaCarpeta.nombre" placeholder="Nombre carpeta">
+          <div class="modal-actions">
+            <button @click="crearCarpeta" class="btn-main">Crear</button>
+            <button @click="showFolderForm=false" class="btn-sec">Cancelar</button>
+          </div>
+        </div>
+      </div>
+      <div v-if="showRenameForm" class="modal">
+        <div class="modal-content">
+          <h3>Renombrar carpeta</h3>
+          <input v-model="renameCarpetaNombre" placeholder="Nuevo nombre">
+          <div class="modal-actions">
+            <button @click="renombrarCarpeta" class="btn-main">Guardar</button>
+            <button @click="showRenameForm=false" class="btn-sec">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Archivos en carpeta -->
+<div v-if="carpetaSeleccionada" class="archivos-seccion">
+  <!-- Encabezado + botón descargar todo -->
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <h3 style="margin:0;">Archivos en: {{carpetaSeleccionada.nombre}}</h3>
+
+    <!-- Botón Descargar todo (ZIP) -->
+    <a
+      :href="`../backend/download_zip.php?id_carpeta=${carpetaSeleccionada.id}${user.admin && usuarioSeleccionado ? '&id_usuario='+usuarioSeleccionado.id : ''}`"
+      class="btn-main"
+      style="text-decoration:none;"
+      title="Descargar todos los archivos de esta carpeta en un ZIP"
+    >
+      ⬇️ Descargar todo
+    </a>
+  </div>
+
+  <!-- (opcional) leyenda cuando admin está viendo archivos de un usuario -->
+  <div v-if="user.admin && usuarioSeleccionado" style="margin:8px 0 0 0;">
+    <strong>Archivos de usuario: {{usuarioSeleccionado.nombre}}</strong>
+  </div>
+
+<!-- Subida de archivos SOLO usuario -->
+<form v-if="!user.admin" @submit.prevent="subirArchivo" class="upload-form" style="margin-top:10px;">
+  <!-- Input múltiple -->
+  <input type="file" ref="fileInput" multiple>
+
+  <!-- Barra de progreso -->
+  <div v-if="progreso > 0" class="progress-bar-container">
+    <div class="progress-bar" :style="{ width: progreso + '%' }"></div>
+  </div>
+
+  <input v-model="descripcionArchivo" placeholder="Descripción">
+  <button type="submit" class="btn-main">Subir</button>
+</form>
+        <table class="table-archivos">
+          <thead>
+            <tr>
+              <th><input type="checkbox" @change="toggleSeleccionTodos($event)"></th>
+              <th>Archivo</th><th>Fecha</th><th>Descripción</th>
+              <th>Estado</th><th>Comentario Admin</th><th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="a in archivos" :key="a.id">
+              <td><input type="checkbox" v-model="seleccionados" :value="a.id"></td>
+              <td>
+                <a :href="`../backend/download.php?id=${a.id}`" target="_blank" :download="a.nombre_archivo">
+                  {{a.nombre_archivo}}
+                </a>
+              </td>
+              <td>{{a.fecha_subida | fechaHora}}</td>
+              <td>{{a.descripcion}}</td>
+              <td>
+                <span v-if="a.estado_revision === 'ok'" class="estado-ok">✔ OK</span>
+                <span v-else-if="a.estado_revision === 'mal'" class="estado-mal">✖ Mal</span>
+                <span v-else class="estado-revisando">⏳ Revisando</span>
+              </td>
+              <td>
+                <span v-if="user.admin">
+                  <input v-model="a.comentario_admin" placeholder="Comentario" style="width:120px">
+                  <button @click="guardarComentario(a)" class="btn-sm">Guardar</button>
+                </span>
+                <span v-else>
+                  {{a.comentario_admin}}
+                </span>
+              </td>
+              <td>
+                <template v-if="user.admin">
+                  <button @click="revisarArchivo(a,'ok')" class="btn-sm estado-ok">OK</button>
+                  <button @click="revisarArchivo(a,'mal')" class="btn-sm estado-mal">Mal</button>
+                  <button @click="revisarArchivo(a,'revisando')" class="btn-sm estado-revisando">Revisando</button>
+                  <button @click="eliminarArchivo(a)" class="btn-sm btn-del">Eliminar</button>
+                </template>
+                <template v-else>
+                  <button v-if="a.estado_revision !== 'ok'" @click="eliminarArchivo(a)" class="btn-sm btn-del">Eliminar</button>
+                </template>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <button v-if="seleccionados.length" @click="borrarSeleccionados" class="btn-del">
+          Eliminar seleccionados ({{ seleccionados.length }})
+        </button>
+      </div>
+    </div>
+
+    <!-- ACERCA DE -->
+    <div v-else-if="page==='acerca'">
+      <h2>Acerca de este Gestor</h2>
+      <p>Sistema privado desarrollado para GRIF S.A.<br>
+        Gestión de archivos con control de revisiones, acceso de usuarios y administradores.<br>
+        Versión 2025.
+      </p>
+    </div>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
