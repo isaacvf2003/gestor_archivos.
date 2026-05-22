@@ -1,5 +1,12 @@
 // frontend/app.js
 // al principio de app.js
+const API_BASE_URL = (window.API_BASE_URL || '').replace(/\/$/, '');
+
+function apiPath(path) {
+  const cleanPath = String(path || '').replace(/^\/+/, '');
+  return API_BASE_URL ? `${API_BASE_URL}/${cleanPath}` : `../backend/${cleanPath}`;
+}
+
 function api(url, options = {}) {
   return fetch(url, { credentials: 'same-origin', ...options });
 }
@@ -39,7 +46,7 @@ new Vue({
   },
   created() {
     // Mantener sesión tras recarga
-   api("../backend/login.php", {
+   api(apiPath('login.php'), {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ check: true })
@@ -66,6 +73,20 @@ new Vue({
   },
   methods: {
     
+
+    downloadZipHref() {
+      if (!this.carpetaSeleccionada) return '#';
+      const params = new URLSearchParams({ id_carpeta: this.carpetaSeleccionada.id });
+      if (this.user && this.user.admin && this.usuarioSeleccionado) {
+        params.set('id_usuario', this.usuarioSeleccionado.id);
+      }
+      return `${apiPath('download_zip.php')}?${params.toString()}`;
+    },
+
+    downloadFileHref(archivoId) {
+      return `${apiPath('download.php')}?id=${encodeURIComponent(archivoId)}`;
+    },
+
     cambiarPagina(p) {
       this.page = p;
       this.menuAbierto = false; // Cerrar menú al navegar
@@ -82,7 +103,7 @@ new Vue({
     },
 
     loginUser() {
-     api("../backend/login.php", {
+     api(apiPath('login.php'), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(this.login)
@@ -102,7 +123,7 @@ new Vue({
 
 
     logout() {
-      api("../backend/logout.php").then(() => {
+      api(apiPath('logout.php')).then(() => {
         this.stopHeartbeat();                 // 👈 DETENER heartbeat al salir
         this.user = null;
         this.carpetas = [];
@@ -123,7 +144,7 @@ new Vue({
       this.heartbeatId = setInterval(() => {
         // Evitamos ruido si no hay usuario logueado
         if (!this.user) return;
-        api("../backend/ping.php", { method: "POST" })
+        api(apiPath('ping.php'), { method: "POST" })
           .then(r => r.json())
           .then(d => {
             if (!d || d.expired) {
@@ -157,7 +178,7 @@ new Vue({
     },
 
     cargarUsuarios() {
-      fetch("../backend/usuarios.php")
+      fetch(apiPath('usuarios.php'))
         .then(r => r.json())
         .then(d => this.usuarios = d);
     },
@@ -172,20 +193,20 @@ new Vue({
   }
   const qs = params.length ? '?'+params.join('&') : '';
 
-  fetch("../backend/carpetas.php"+qs, { credentials:'same-origin' })
+  fetch(apiPath('carpetas.php')+qs, { credentials:'same-origin' })
     .then(r => r.json())
     .then(d => this.carpetas = d);
 },
 
     cargarStats() {
-      fetch("../backend/archivos.php?stats=1")
+      fetch(`${apiPath('archivos.php')}?stats=1`)
         .then(r => r.json()).then(d => {
           this.archivosTotal = d.total || 0;
         });
     },
 
     cargarUltimosArchivos() {
-      fetch("../backend/archivos.php?ultimos=1")
+      fetch(`${apiPath('archivos.php')}?ultimos=1`)
         .then(r => r.json()).then(d => {
           this.ultimosArchivos = d || [];
         });
@@ -209,7 +230,7 @@ renombrarCarpeta() {
     payload.id_usuario = this.usuarioSeleccionado.id;
   }
 
-  fetch("../backend/carpetas.php", {
+  fetch(apiPath('carpetas.php'), {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
@@ -226,7 +247,7 @@ renombrarCarpeta() {
 },
 
     crearUsuario() {
-    api("../backend/usuarios.php", {
+    api(apiPath('usuarios.php'), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(this.nuevoUsuario)
@@ -244,7 +265,7 @@ renombrarCarpeta() {
 
     eliminarUsuario(u) {
       if (confirm("¿Eliminar usuario?"))
-        fetch("../backend/usuarios.php?id=" + u.id, { method: "DELETE" })
+        fetch(`${apiPath('usuarios.php')}?id=${u.id}`, { method: "DELETE" })
           .then(() => this.cargarUsuarios());
     },
 
@@ -253,7 +274,7 @@ renombrarCarpeta() {
     crearCarpeta() {
       let data = Object.assign({}, this.nuevaCarpeta);
       if (this.carpetaPadre && this.carpetaPadre.id) data.id_padre = this.carpetaPadre.id;
-      fetch("../backend/carpetas.php", {
+      fetch(apiPath('carpetas.php'), {
         method: "POST",
         body: JSON.stringify(data)
       }).then(() => {
@@ -265,7 +286,7 @@ renombrarCarpeta() {
 
     eliminarCarpeta(c) {
       if (confirm("¿Eliminar carpeta?"))
-        fetch("../backend/carpetas.php?id=" + c.id, { method: "DELETE" })
+        fetch(`${apiPath('carpetas.php')}?id=${c.id}`, { method: "DELETE" })
           .then(() => this.cargarCarpetas());
     },
 
@@ -323,7 +344,7 @@ renombrarCarpeta() {
       let params = `id_carpeta=${this.carpetaSeleccionada.id}`;
       if (this.user.admin && this.usuarioSeleccionado)
         params += `&id_usuario=${this.usuarioSeleccionado.id}`;
-      fetch(`../backend/archivos.php?${params}`)
+      fetch(`${apiPath('archivos.php')}?${params}`)
         .then(r => r.json()).then(d => this.archivos = d);
     },
 
@@ -343,7 +364,7 @@ renombrarCarpeta() {
       }
 
       const xhr = new XMLHttpRequest();
-      xhr.open("POST", "../backend/upload.php", true);
+      xhr.open("POST", apiPath('upload.php'), true);
 
       // Progreso
       xhr.upload.onprogress = (e) => {
@@ -369,20 +390,20 @@ renombrarCarpeta() {
     },
     eliminarArchivo(a) {
       if (confirm("¿Eliminar archivo?")) {
-        fetch(`../backend/archivos.php?id=${a.id}`, { method: "DELETE" })
+        fetch(`${apiPath('archivos.php')}?id=${a.id}`, { method: "DELETE" })
           .then(() => this.cargarArchivos());
       }
     },
 
     revisarArchivo(a, estado) {
-      fetch("../backend/revisar_archivo.php", {
+      fetch(apiPath('revisar_archivo.php'), {
         method: "POST",
         body: JSON.stringify({ id_archivo: a.id, estado: estado, comentario: a.comentario_admin })
       }).then(() => this.cargarArchivos());
     },
 
     guardarComentario(a) {
-      fetch("../backend/revisar_archivo.php", {
+      fetch(apiPath('revisar_archivo.php'), {
         method: "POST",
         body: JSON.stringify({ id_archivo: a.id, estado: a.estado_revision, comentario: a.comentario_admin })
       }).then(() => this.cargarArchivos());
@@ -435,7 +456,7 @@ renombrarCarpeta() {
 borrarSeleccionados() {
   if (!confirm(`¿Seguro que quieres eliminar ${this.seleccionados.length} archivos?`)) return;
 
-  fetch("../backend/eliminar_multiple.php", {
+  fetch(apiPath('eliminar_multiple.php'), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids: this.seleccionados })
