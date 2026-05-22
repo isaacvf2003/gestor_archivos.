@@ -2,9 +2,22 @@
 // al principio de app.js
 const API_BASE_URL = (window.API_BASE_URL || '').replace(/\/$/, '');
 
+function fallbackBackendBase() {
+  const pathname = window.location.pathname || '/';
+  const frontendIndex = pathname.indexOf('/frontend/');
+
+  if (frontendIndex >= 0) {
+    const base = pathname.slice(0, frontendIndex);
+    return `${base}/backend`;
+  }
+
+  return '/backend';
+}
+
 function apiPath(path) {
   const cleanPath = String(path || '').replace(/^\/+/, '');
-  return API_BASE_URL ? `${API_BASE_URL}/${cleanPath}` : `../backend/${cleanPath}`;
+  const base = API_BASE_URL || fallbackBackendBase();
+  return `${base}/${cleanPath}`;
 }
 
 function api(url, options = {}) {
