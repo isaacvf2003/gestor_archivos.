@@ -9,6 +9,36 @@ const DEMO_FOLDERS = [
   { id: 3, nombre: "Revision mensual", parentId: 1 }
 ];
 
+const DEMO_SECURITY = {
+  maxFiles: 10,
+  maxFileSize: 10 * 1024 * 1024,
+  maxBatchSize: 30 * 1024 * 1024,
+  allowedExtensions: ["jpg", "jpeg", "png", "gif", "webp", "pdf", "txt"],
+  allowedMimeTypes: [
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "application/pdf",
+    "text/plain"
+  ],
+  blockedExtensions: ["html", "htm", "js", "mjs", "svg", "php", "exe", "bat", "cmd", "sh", "ps1", "jar", "zip", "rar", "7z"]
+};
+
+function getDemoVisitorId() {
+  const key = "grif_demo_visitante_id";
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) {
+      id = `visitante-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      localStorage.setItem(key, id);
+    }
+    return id;
+  } catch (error) {
+    return `visitante-temporal-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
 new Vue({
   el: "#app",
   data: {
@@ -28,6 +58,7 @@ new Vue({
     currentFolderId: null,
     selectedFolderId: null,
     breadcrumb: [],
+    localDemoId: getDemoVisitorId(),
     newFolder: { nombre: "" },
     renameFolderName: "",
     renameFolderTarget: null,
@@ -38,6 +69,7 @@ new Vue({
     search: "",
     statusFilter: "todos",
     previewFile: null,
+    validationErrors: [],
     newUser: { nombre: "", usuario: "", clave: "", admin: false }
   },
   computed: {
@@ -57,7 +89,7 @@ new Vue({
     },
     visibleFiles() {
       if (!this.user || !this.selectedFolderId) return [];
-      let items = this.files.filter(f => f.folderId === this.selectedFolderId);
+      let items = this.files.filter(f => f.folderId === this.selectedFolderId && f.ownerKey === this.localDemoId);
       if (!this.user.admin) return items.filter(f => f.userId === this.user.id);
       if (!this.selectedUserId) return [];
       return items.filter(f => f.userId === this.selectedUserId);
@@ -190,18 +222,83 @@ new Vue({
       this.dragOver = false;
       this.setPending(Array.from(event.dataTransfer.files || []));
     },
-    setPending(files) {
+    async setPending(files) {
       this.clearPending();
-      this.pendingFiles = files;
-      this.previews = files.map((file, index) => ({
+      const { accepted, errors } = await this.validateFiles(files);
+      this.validationErrors = errors;
+      this.pendingFiles = accepted;
+      this.previews = accepted.map((file, index) => ({
         index,
-        key: `${file.name}-${file.size}-${index}`,
-        name: file.name,
+        key: `${file.safeName}-${file.size}-${index}`,
+        name: file.safeName,
+        originalName: file.name,
         size: file.size,
         image: file.type.startsWith("image/"),
         url: URL.createObjectURL(file)
       }));
       this.syncInput();
+    },
+    async validateFiles(files) {
+      const accepted = [];
+      const errors = [];
+      const batch = files.slice(0, DEMO_SECURITY.maxFiles);
+      if (files.length > DEMO_SECURITY.maxFiles) {
+        errors.push(`Solo se permiten ${DEMO_SECURITY.maxFiles} archivos por subida.`);
+      }
+      let total = 0;
+      for (const file of batch) {
+        const error = await this.validateFile(file);
+        if (error) {
+          errors.push(`${file.name}: ${error}`);
+          continue;
+        }
+        total += file.size;
+        if (total > DEMO_SECURITY.maxBatchSize) {
+          errors.push("El total de la subida supera 30 MB.");
+          break;
+        }
+        file.safeName = this.safeFileName(file.name);
+        accepted.push(file);
+      }
+      return { accepted, errors };
+    },
+    async validateFile(file) {
+      const parts = String(file.name).toLowerCase().split(".");
+      const ext = parts.length > 1 ? parts.pop() : "";
+      const hasBlockedDoubleExtension = parts.some(part => DEMO_SECURITY.blockedExtensions.includes(part));
+      if (!ext || !DEMO_SECURITY.allowedExtensions.includes(ext)) return "tipo de archivo no permitido";
+      if (hasBlockedDoubleExtension || DEMO_SECURITY.blockedExtensions.includes(ext)) return "nombre con extension peligrosa";
+      if (!file.size) return "archivo vacio o corrupto";
+      if (file.size > DEMO_SECURITY.maxFileSize) return "supera el limite de 10 MB";
+      if (file.type && !DEMO_SECURITY.allowedMimeTypes.includes(file.type)) return "MIME no permitido";
+      const header = new Uint8Array(await file.slice(0, 512).arrayBuffer());
+      if (!this.matchesSignature(ext, header)) return "firma interna invalida o archivo corrupto";
+      if (ext === "txt") {
+        const sample = await file.slice(0, 4096).text();
+        if (/\x00/.test(sample) || /<\s*(script|iframe|object|embed|svg|html|body)/i.test(sample)) {
+          return "texto con contenido potencialmente peligroso";
+        }
+      }
+      return "";
+    },
+    matchesSignature(ext, bytes) {
+      const starts = signature => signature.every((value, index) => bytes[index] === value);
+      if (["jpg", "jpeg"].includes(ext)) return starts([0xff, 0xd8, 0xff]);
+      if (ext === "png") return starts([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      if (ext === "gif") return starts([0x47, 0x49, 0x46, 0x38]);
+      if (ext === "webp") return starts([0x52, 0x49, 0x46, 0x46]) && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50;
+      if (ext === "pdf") return starts([0x25, 0x50, 0x44, 0x46, 0x2d]);
+      if (ext === "txt") return !Array.from(bytes).some(byte => byte === 0);
+      return false;
+    },
+    safeFileName(name) {
+      return String(name)
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9._ -]/g, "_")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 90) || "archivo-seguro";
     },
     syncInput() {
       if (!this.$refs.fileInput || typeof DataTransfer === "undefined") return;
@@ -217,6 +314,7 @@ new Vue({
       this.previews.forEach(p => URL.revokeObjectURL(p.url));
       this.previews = [];
       this.pendingFiles = [];
+      this.validationErrors = [];
       if (this.$refs.fileInput) this.$refs.fileInput.value = "";
     },
     uploadFiles() {
@@ -236,9 +334,11 @@ new Vue({
           userId: this.user.id,
           folderId: this.selectedFolderId,
           name: preview.name,
+          originalName: preview.originalName,
           size: preview.size,
           image: preview.image,
           url: preview.url,
+          ownerKey: this.localDemoId,
           description: this.description,
           status: "revisando",
           comment: "",
@@ -248,6 +348,7 @@ new Vue({
       this.pendingFiles = [];
       this.previews = [];
       this.description = "";
+      this.validationErrors = [];
       if (this.$refs.fileInput) this.$refs.fileInput.value = "";
     },
     reviewFile(file, status) {

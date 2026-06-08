@@ -1218,3 +1218,26 @@ button:hover {
   font-weight: 700;
   box-shadow: 0 10px 22px rgba(21, 69, 119, .06);
 }
+
+/* Seguridad de carga local: avisos y errores de validación antes de previsualizar. */
+.security-note {
+  width: 100%;
+  margin: 10px 0 0;
+  color: #4b6380;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.validation-errors {
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid #ffc9c9;
+  border-radius: 10px;
+  background: #fff5f5;
+  color: #9c2323;
+}
+.validation-errors ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.validation-errors li { margin: 3px 0; }

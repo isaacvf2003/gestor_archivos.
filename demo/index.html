@@ -140,7 +140,7 @@
         <form v-if="!user.admin" class="upload-box" :class="{over: dragOver}" @submit.prevent="uploadFiles" @dragover.prevent="dragOver=true" @dragleave.prevent="dragOver=false" @drop.prevent="dropFiles">
           <div class="drop-message" v-if="!previews.length">
             <strong>Arrastra archivos aqui</strong>
-            <span>o selecciona imagenes/documentos para simular la subida.</span>
+            <span>o selecciona imagenes/documentos seguros para simular la subida local.</span>
           </div>
           <div class="upload-row">
             <label class="file-picker">
@@ -149,6 +149,13 @@
             </label>
             <input v-model.trim="description" placeholder="Descripcion">
             <button class="btn-main">Subir</button>
+          </div>
+          <p class="security-note">Se aceptan JPG, PNG, GIF, WEBP, PDF y TXT. Se bloquean archivos ejecutables, HTML/SVG/scripts, archivos vacios, extensiones dobles peligrosas y firmas internas invalidas. Esta demo queda aislada en este navegador.</p>
+          <div v-if="validationErrors.length" class="validation-errors">
+            <strong>Archivo(s) rechazado(s):</strong>
+            <ul>
+              <li v-for="error in validationErrors" :key="error">{{error}}</li>
+            </ul>
           </div>
           <div v-if="previews.length" class="preview-panel">
             <div class="preview-head">
