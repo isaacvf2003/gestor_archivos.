@@ -1200,3 +1200,21 @@ button:hover {
   .header-bar { padding: 18px; }
   .carpetas-grid { max-width: none; }
 }
+
+/* El admin debe trabajar por usuario: no existe vista mezclada de todos los archivos. */
+.user-select {
+  min-width: 180px;
+  padding: 7px 12px;
+  font-weight: 700;
+}
+.empty-state.user-required {
+  max-width: 560px;
+  margin: 22px 0;
+  padding: 24px 28px;
+  border: 1px dashed #8eb4dd;
+  border-radius: 16px;
+  background: rgba(255,255,255,.72);
+  color: #154577;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba(21, 69, 119, .06);
+}

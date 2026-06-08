@@ -24,7 +24,7 @@ new Vue({
     users: DEMO_USERS.map(u => ({ ...u })),
     folders: DEMO_FOLDERS.map(f => ({ ...f })),
     files: [],
-    selectedUserId: 0,
+    selectedUserId: "",
     currentFolderId: null,
     selectedFolderId: null,
     breadcrumb: [],
@@ -42,12 +42,15 @@ new Vue({
   },
   computed: {
     nonAdminUsers() {
-      return this.users.filter(u => !u.admin);
+      return this.users
+        .filter(u => !u.admin)
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
     },
     selectedUser() {
       return this.users.find(u => u.id === this.selectedUserId) || null;
     },
     currentFolders() {
+      if (this.user && this.user.admin && !this.selectedUserId) return [];
       return this.folders.filter(f => f.parentId === this.currentFolderId);
     },
     selectedFolder() {
@@ -56,9 +59,9 @@ new Vue({
     visibleFiles() {
       if (!this.user || !this.selectedFolderId) return [];
       let items = this.files.filter(f => f.folderId === this.selectedFolderId);
-      if (!this.user.admin) items = items.filter(f => f.userId === this.user.id);
-      if (this.user.admin && this.selectedUserId) items = items.filter(f => f.userId === this.selectedUserId);
-      return items;
+      if (!this.user.admin) return items.filter(f => f.userId === this.user.id);
+      if (!this.selectedUserId) return [];
+      return items.filter(f => f.userId === this.selectedUserId);
     },
     filteredFiles() {
       const term = this.search.toLowerCase();
@@ -92,7 +95,7 @@ new Vue({
       this.user = found;
       this.loginError = false;
       this.page = found.admin ? "dashboard" : "carpetas";
-      this.selectedUserId = 0;
+      this.selectedUserId = found.admin ? "" : found.id;
       this.goRoot();
     },
     quickLogin(kind) {
@@ -122,7 +125,7 @@ new Vue({
       this.files.filter(f => f.userId === user.id).forEach(f => URL.revokeObjectURL(f.url));
       this.files = this.files.filter(f => f.userId !== user.id);
       this.users = this.users.filter(u => u.id !== user.id);
-      if (this.selectedUserId === user.id) this.selectedUserId = 0;
+      if (this.selectedUserId === user.id) this.selectedUserId = "";
     },
     viewAsUser(user) {
       this.selectedUserId = user.id;
@@ -268,7 +271,7 @@ new Vue({
       this.users = DEMO_USERS.map(u => ({ ...u }));
       this.folders = DEMO_FOLDERS.map(f => ({ ...f }));
       this.files = [];
-      this.selectedUserId = 0;
+      this.selectedUserId = this.user && !this.user.admin ? this.user.id : "";
       this.goRoot();
       this.page = this.user && this.user.admin ? "dashboard" : "carpetas";
     },
