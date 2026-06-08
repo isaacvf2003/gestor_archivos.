@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo Gestor </title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app" class="app">
+  <aside v-if="user" class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">G</div>
+      <strong>IsaaCode</strong>
+      <span>Demo local</span>
+    </div>
+    <nav>
+      <button v-if="user.admin" :class="{active: page==='dashboard'}" @click="switchPage('dashboard')">Inicio</button>
+      <button v-if="user.admin" :class="{active: page==='usuarios'}" @click="switchPage('usuarios')">Usuarios</button>
+      <button :class="{active: page==='carpetas'}" @click="switchPage('carpetas')">Carpetas</button>
+      <button :class="{active: page==='acerca'}" @click="switchPage('acerca')">Acerca</button>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <section v-if="!user" class="login-wrap">
+      <form class="login-card" @submit.prevent="loginUser">
+        <div class="brand-mark big">G</div>
+        <h1>Gestor Documental</h1>
+        <p>Demo temporal: todo vive solo en esta pestana.</p>
+        <input v-model.trim="login.usuario" placeholder="Usuario">
+        <div class="password-field">
+          <input v-model="login.clave" :type="showPassword ? 'text' : 'password'" placeholder="Clave">
+          <button type="button" class="icon-btn password-toggle" @click="showPassword=!showPassword" aria-label="Ver clave">
+            <span class="eye-icon" :class="{closed: !showPassword}"></span>
+          </button>
+        </div>
+        <button class="primary">Entrar</button>
+        <div class="quick-logins">
+          <button type="button" @click="quickLogin('admin')">Entrar como admin</button>
+          <button type="button" @click="quickLogin('roman')">Entrar como usuario</button>
+        </div>
+        <div v-if="loginError" class="error">Usuario o clave incorrectos</div>
+      </form>
+    </section>
+
+    <template v-else>
+      <header class="topbar">
+        <div>
+          <span>Bienvenido, {{user.nombre}}</span>
+          <strong v-if="user.admin">(Admin)</strong>
+        </div>
+        <button class="secondary" @click="logout">Salir</button>
+      </header>
+
+      <section v-if="page==='dashboard'" class="page">
+        <h2>Dashboard</h2>
+        <div class="stats">
+          <div><span>Usuarios</span><strong>{{users.length}}</strong></div>
+          <div><span>Archivos</span><strong>{{files.length}}</strong></div>
+          <div><span>Aprobados</span><strong>{{countByStatus('ok')}}</strong></div>
+          <div><span>En revision</span><strong>{{countByStatus('revisando')}}</strong></div>
+          <div><span>Observados</span><strong>{{countByStatus('mal')}}</strong></div>
+        </div>
+        <h3>Ultima actividad</h3>
+        <table>
+          <thead><tr><th>Usuario</th><th>Archivo</th><th>Estado</th><th>Fecha</th></tr></thead>
+          <tbody>
+            <tr v-for="f in latestFiles" :key="f.id">
+              <td>{{userName(f.userId)}}</td>
+              <td>{{f.name}}</td>
+              <td><span :class="'status ' + f.status">{{statusLabel(f.status)}}</span></td>
+              <td>{{f.date}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section v-if="page==='usuarios' && user.admin" class="page">
+        <div class="section-head">
+          <h2>Gestion de Usuarios</h2>
+          <button class="primary" @click="showUserForm=true">+ Nuevo Usuario</button>
+        </div>
+        <table>
+          <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Acciones</th></tr></thead>
+          <tbody>
+            <tr v-for="u in users" :key="u.id">
+              <td>{{u.nombre}}</td>
+              <td>{{u.usuario}}</td>
+              <td>{{u.admin ? 'Admin' : 'Usuario'}}</td>
+              <td>
+                <button class="small" @click="viewAsUser(u)">Ver archivos</button>
+                <button class="small danger" v-if="u.id !== 1" @click="deleteUser(u)">Eliminar</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section v-if="page==='carpetas'" class="page">
+        <div class="section-head">
+          <div>
+            <h2>Carpetas</h2>
+            <p v-if="user.admin">Vista de usuario: <strong>{{selectedUser ? selectedUser.nombre : 'Todos'}}</strong></p>
+          </div>
+          <div class="head-actions">
+            <select v-if="user.admin" v-model.number="selectedUserId">
+              <option :value="0">Todos los usuarios</option>
+              <option v-for="u in nonAdminUsers" :key="u.id" :value="u.id">{{u.nombre}}</option>
+            </select>
+            <button v-if="user.admin" class="primary" @click="showFolderForm=true">+ Nueva Carpeta</button>
+          </div>
+        </div>
+
+        <div v-if="breadcrumb.length || currentFolderId" class="breadcrumb">
+          <button @click="goRoot">Carpetas raiz</button>
+          <span v-for="(folder, idx) in breadcrumb" :key="folder.id">
+            &gt; <button @click="goBreadcrumb(idx)">{{folder.nombre}}</button>
+          </span>
+        </div>
+
+        <div class="folder-grid">
+          <div v-for="folder in currentFolders" :key="folder.id" class="folder-card">
+            <div class="folder-icon"></div>
+            <strong>{{folder.nombre}}</strong>
+            <div class="folder-actions">
+              <button class="small" @click="selectFolder(folder)">Ver</button>
+              <button v-if="user.admin" class="small" @click="openRenameFolder(folder)">Renombrar</button>
+              <button v-if="user.admin" class="small danger" @click="deleteFolder(folder)">Eliminar</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="selectedFolder" class="files-section">
+          <div class="files-title">
+            <h3>Archivos en: {{selectedFolder.nombre}}</h3>
+          </div>
+
+        <form v-if="!user.admin" class="upload-box" :class="{over: dragOver}" @submit.prevent="uploadFiles" @dragover.prevent="dragOver=true" @dragleave.prevent="dragOver=false" @drop.prevent="dropFiles">
+          <div class="drop-message" v-if="!previews.length">
+            <strong>Arrastra archivos aqui</strong>
+            <span>o selecciona imagenes/documentos para simular la subida.</span>
+          </div>
+          <div class="upload-row">
+            <label class="file-picker">
+              <input type="file" ref="fileInput" multiple @change="pickFiles" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt">
+              <span>Seleccionar archivos</span>
+            </label>
+            <input v-model.trim="description" placeholder="Descripcion">
+            <button class="primary">Subir</button>
+          </div>
+          <div v-if="previews.length" class="preview-panel">
+            <div class="preview-head">
+              <strong>{{previews.length}} archivo(s) listos</strong>
+              <button type="button" @click="clearPending">Quitar todos</button>
+              <span>{{formatBytes(pendingSize)}} total</span>
+            </div>
+            <div class="preview-grid">
+              <div v-for="p in previews" :key="p.key" class="preview-card">
+                <button type="button" class="remove-preview" @click="removePending(p.index)">X</button>
+                <img v-if="p.image" :src="p.url" :alt="p.name">
+                <div v-else class="file-chip">{{fileIcon(p.name)}}</div>
+                <div>
+                  <strong :title="p.name">{{p.name}}</strong>
+                  <span>{{formatBytes(p.size)}}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        <div class="toolbar">
+          <input v-model.trim="search" placeholder="Buscar archivo, descripcion o comentario">
+          <select v-model="statusFilter">
+            <option value="todos">Todos los estados</option>
+            <option value="revisando">Revisando</option>
+            <option value="ok">OK</option>
+            <option value="mal">Mal</option>
+          </select>
+          <span>{{filteredFiles.length}} de {{visibleFiles.length}} archivo(s)</span>
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>Vista</th><th>Archivo</th><th>Usuario</th><th>Descripcion</th><th>Estado</th><th>Comentario Admin</th><th>Acciones</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="f in filteredFiles" :key="f.id">
+              <td>
+                <button class="thumb" @click="openPreview(f)">
+                  <img v-if="f.image" :src="f.url" :alt="f.name">
+                  <span v-else>{{fileIcon(f.name)}}</span>
+                </button>
+              </td>
+              <td>{{f.name}}</td>
+              <td>{{userName(f.userId)}}</td>
+              <td>{{f.description}}</td>
+              <td><span :class="'status ' + f.status">{{statusLabel(f.status)}}</span></td>
+              <td>
+                <template v-if="user.admin">
+                  <input v-model="f.comment" placeholder="Comentario">
+                </template>
+                <template v-else>{{f.comment}}</template>
+              </td>
+              <td>
+                <template v-if="user.admin">
+                  <button class="small ok" @click="reviewFile(f,'ok')">OK</button>
+                  <button class="small warn" @click="reviewFile(f,'revisando')">Revisando</button>
+                  <button class="small danger" @click="reviewFile(f,'mal')">Mal</button>
+                </template>
+                <button class="small danger" @click="deleteFile(f)">Eliminar</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <section v-if="page==='acerca'" class="page">
+        <h2>Acerca</h2>
+        <p>Esta demo corre completamente en el navegador. Los archivos a ningun servidor.</p>
+        <button class="danger reset" @click="resetDemo">Reiniciar demo</button>
+      </section>
+    </template>
+  </main>
+
+  <div v-if="showUserForm" class="modal" @click.self="showUserForm=false">
+    <form class="modal-card" @submit.prevent="createUser">
+      <h3>Nuevo Usuario</h3>
+      <input v-model.trim="newUser.nombre" placeholder="Nombre" required>
+      <input v-model.trim="newUser.usuario" placeholder="Usuario" required>
+      <div class="password-field">
+        <input v-model="newUser.clave" :type="showNewUserPassword ? 'text' : 'password'" placeholder="Clave" required>
+        <button type="button" class="icon-btn password-toggle" @click="showNewUserPassword=!showNewUserPassword">
+          <span class="eye-icon" :class="{closed: !showNewUserPassword}"></span>
+        </button>
+      </div>
+      <label class="check"><input type="checkbox" v-model="newUser.admin"> Admin</label>
+      <div class="actions">
+        <button class="primary">Crear</button>
+        <button type="button" class="secondary" @click="showUserForm=false">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div v-if="showFolderForm" class="modal" @click.self="showFolderForm=false">
+    <form class="modal-card" @submit.prevent="createFolder">
+      <h3>Nueva Carpeta</h3>
+      <input v-model.trim="newFolder.nombre" placeholder="Nombre carpeta" required>
+      <div class="actions">
+        <button class="primary">Crear</button>
+        <button type="button" class="secondary" @click="showFolderForm=false">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div v-if="showRenameForm" class="modal" @click.self="showRenameForm=false">
+    <form class="modal-card" @submit.prevent="renameFolder">
+      <h3>Renombrar Carpeta</h3>
+      <input v-model.trim="renameFolderName" placeholder="Nuevo nombre" required>
+      <div class="actions">
+        <button class="primary">Guardar</button>
+        <button type="button" class="secondary" @click="showRenameForm=false">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div v-if="previewFile" class="modal" @click.self="closePreview">
+    <div class="modal-card preview-modal">
+      <div class="preview-title">
+        <strong>{{previewFile.name}}</strong>
+        <button class="icon-btn" @click="closePreview">X</button>
+      </div>
+      <img v-if="previewFile.image" class="large-preview" :src="previewFile.url" :alt="previewFile.name">
+      <div v-else class="document-preview">{{fileIcon(previewFile.name)}}</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@2"></script>
+<script src="app.js"></script>
+</body>
+</html>
