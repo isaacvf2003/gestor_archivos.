@@ -1,4 +1,3 @@
-Demo estatica para Vercel
 
 Esta version no usa backend ni base de datos. Todo corre en el navegador:
 
