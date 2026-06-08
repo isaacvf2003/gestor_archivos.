@@ -1201,7 +1201,7 @@ button:hover {
   .carpetas-grid { max-width: none; }
 }
 
-/* El admin debe trabajar por usuario: no existe vista mezclada de todos los archivos. */
+/* El admin siempre ve las carpetas, pero los archivos se filtran por usuario seleccionado. */
 .user-select {
   min-width: 180px;
   padding: 7px 12px;

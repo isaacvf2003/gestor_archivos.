@@ -50,7 +50,6 @@ new Vue({
       return this.users.find(u => u.id === this.selectedUserId) || null;
     },
     currentFolders() {
-      if (this.user && this.user.admin && !this.selectedUserId) return [];
       return this.folders.filter(f => f.parentId === this.currentFolderId);
     },
     selectedFolder() {

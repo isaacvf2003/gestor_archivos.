@@ -105,7 +105,7 @@
             <p v-if="user.admin">Vista de usuario: <strong>{{selectedUser ? selectedUser.nombre : 'Selecciona un usuario'}}</strong></p>
           </div>
           <div class="head-actions">
-            <select v-if="user.admin" v-model.number="selectedUserId" @change="goRoot" class="user-select">
+            <select v-if="user.admin" v-model.number="selectedUserId" @change="clearPending" class="user-select">
               <option value="" disabled>Selecciona un usuario</option>
               <option v-for="u in nonAdminUsers" :key="u.id" :value="u.id">{{u.nombre}}</option>
             </select>
@@ -120,11 +120,7 @@
           </span>
         </div>
 
-        <div v-if="user.admin && !selectedUserId" class="empty-state user-required">
-          Selecciona un usuario para ver solo sus carpetas y archivos subidos.
-        </div>
-
-        <div v-else class="carpetas-grid">
+        <div class="carpetas-grid">
           <div v-for="folder in currentFolders" :key="folder.id" class="carpeta-card">
             <div class="icono-carpeta"></div>
             <strong class="carpeta-nombre">{{folder.nombre}}</strong>
@@ -174,6 +170,11 @@
           </div>
         </form>
 
+        <div v-if="user.admin && !selectedUserId" class="empty-state user-required">
+          Selecciona un usuario para ver los archivos subidos por esa persona en esta carpeta.
+        </div>
+
+        <template v-else>
         <div class="toolbar">
           <input v-model.trim="search" placeholder="Buscar archivo, descripcion o comentario">
           <select v-model="statusFilter">
@@ -218,6 +219,7 @@
             </tr>
           </tbody>
         </table>
+        </template>
         </div>
       </section>
 
